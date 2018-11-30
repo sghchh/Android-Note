@@ -123,6 +123,8 @@ Handler发送消息的方法有很多，但无论你是send一个Message还是po
 3. 调用Looper.loop()方法  
 	* 开始发送消息给Handler处理
 
+> Handler实现跨线程通信的流程：handler通过在构造器中调用Looper.myloop()将Looper的消息对列和自己的消息队列绑定到了一起，而handler调用sendMessage方法时将消息事件放到了自己的消息队列中，由于Java中引用赋值后指向同一块内存，所以Looper自己的消息队列中也有了消息事件；而Looper通过loop()方法来在自己的线程中将消息取出发送给Handler处理。
+
 # HandlerThread详解  
 HandlerThread是安卓内部封装好的一个**轻量级的线程**，和Handler配合使用实现耗时操作或者异步操作。  
 ### 源码分析  
