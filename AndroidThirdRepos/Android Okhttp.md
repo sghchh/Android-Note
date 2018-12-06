@@ -195,4 +195,233 @@ Cache用来设置缓存，当没有网络的时候，可以读取缓存的数据
 * CacheControl.Builder noTransform()
 * CacheControl.Builder onlyIfCached()
 
+## 二、Okhttp源码学习  
+> [参考文章](http://liuwangshu.cn/application/network/7-okhttp3-sourcecode.html)  
+
+### 1. Okhttp异步请求中onFailure和onResponse方法被回调时机  
+
+事件传递到Dispatcher的过程是：newCall方法返回一个RealCall对象(Call接口的实现类)，RealCall方法的enqueue方法内部先获取Dispatcher对象，然后调用Dispatcher的enqueue(AsyncCall)方法最终执行enqueue：  
+
+**Dispatcher的enqueue(AsyncCall)方法：**  
+
+	synchronized void enqueue(AsyncCall call) {
+	  if (runningAsyncCalls.size() < maxRequests && runningCallsForHost(call) < maxRequestsPerHost) {
+	    runningAsyncCalls.add(call);
+	    executorService().execute(call);
+	  } else {
+	    readyAsyncCalls.add(call);
+	  }
+	}  
+
+可见该方法的思想是：**如果当前正在运行的异步请求队列中的数量小于64并且正在运行的请求主机数小于5时则把请求加载到runningAsyncCalls中并在线程池中执行，否则就再入到readyAsyncCalls中进行缓存等待。**    
+
+到此，事件流执行到了**executorService().execute(call)**，而这里的call参数是一个AsyncCall对象，其内部也实现了execute方法：  
+
+	@Override protected void execute() {
+	  boolean signalledCallback = false;
+	  try {
+	    Response response = getResponseWithInterceptorChain(forWebSocket);
+	    if (canceled) {
+	      signalledCallback = true;
+	      responseCallback.onFailure(RealCall.this, new IOException("Canceled"));
+	    } else {
+	      signalledCallback = true;
+	      responseCallback.onResponse(RealCall.this, response);
+	    }
+	  } catch (IOException e) {
+	    if (signalledCallback) {
+	      // Do not signal the callback twice!
+	      logger.log(Level.INFO, "Callback failure for " + toLoggableString(), e);
+	    } else {
+	      responseCallback.onFailure(RealCall.this, e);
+	    }
+	  } finally {
+	    client.dispatcher().finished(this);
+	  }
+	}  
+
+可见**我们重写的onResponse和onFailure方法终于在这里被回调了**。  
+
+但是有一个问题来了，这里方法被回调完了，代表着网络请求完成了，可是我们的线程池好像并没有发挥应有的效果啊？别慌，finally块中的代码是一定会执行的：  
+
+	synchronized void finished(AsyncCall call) {
+	   if (!runningAsyncCalls.remove(call)) throw new AssertionError("AsyncCall wasn't running!");
+	   promoteCalls();
+	 }  
+
+	private void promoteCalls() {
+	  if (runningAsyncCalls.size() >= maxRequests) return; // Already running max capacity.
+	  if (readyAsyncCalls.isEmpty()) return; // No ready calls to promote.
+	  for (Iterator<AsyncCall> i = readyAsyncCalls.iterator(); i.hasNext(); ) {
+	    AsyncCall call = i.next();
+	
+	    if (runningCallsForHost(call) < maxRequestsPerHost) {
+	      i.remove();
+	      runningAsyncCalls.add(call);
+	      executorService().execute(call);
+	    }
+	    if (runningAsyncCalls.size() >= maxRequests) return; // Reached max capacity.
+	  }
+	}  
+
+思想就是：**当一个网络请求完成了以后，就将其从正在执行的队列中取出，从等待队列中取出一个放入正在执行的队列中，达到复用的效果**  
+
+### 2. Interceptor之后的动作  
+
+这时候网络请求的流程就传递到了**Response response = getResponseWithInterceptorChain(forWebSocket)**中：  
+
+	private Response getResponseWithInterceptorChain(boolean forWebSocket) throws IOException {
+	  Interceptor.Chain chain = new ApplicationInterceptorChain(0, originalRequest, forWebSocket);
+	  return chain.proceed(originalRequest);
+	}  
+
+	@Override public Response proceed(Request request) throws IOException {
+	  // If there's another interceptor in the chain, call that.
+	  if (index < client.interceptors().size()) {
+	    Interceptor.Chain chain = new ApplicationInterceptorChain(index + 1, request, forWebSocket);
+	    //从拦截器列表取出拦截器
+	    Interceptor interceptor = client.interceptors().get(index);
+	    Response interceptedResponse = interceptor.intercept(chain);
+	
+	    if (interceptedResponse == null) {
+	      throw new NullPointerException("application interceptor " + interceptor
+	          + " returned null");
+	    }
+	
+	    return interceptedResponse;
+	  }
+	
+	  // No more interceptors. Do HTTP.
+	  return getResponse(request, forWebSocket);
+	}  
+
+一个重要的概念是，拦截器如果不只有一个的话(**也就是index < client.interceptors().size()当前拦截器不是最后一个**)，下面三行代码会被执行：  
+
+	Interceptor.Chain chain = new ApplicationInterceptorChain(index + 1, request, forWebSocket);
+    //从拦截器列表取出拦截器
+    Interceptor interceptor = client.interceptors().get(index);
+    Response interceptedResponse = interceptor.intercept(chain);  
+
+其中，**不同的拦截器的intercept方法实现不同，但是里面还是会回调Interceptor.Chain的proceed方法，以此来达到一种递归，直到所有的拦截器都执行过**  
+
+> 我们知道，**拦截器的作用是拦截Response从而对其进行一些加工，所以中间的拦截器返回的response都不是最终的结果，最终的结果一定是最后一个拦截器调用Chain的proceed方法，proceed方法中的return getResponse(request, forWebSocket)方法返回的**  
+
+
+	Response getResponse(Request request, boolean forWebSocket) throws IOException {
+	 ...省略
+	    // Create the initial HTTP engine. Retries and redirects need new engine for each attempt.
+	    engine = new HttpEngine(client, request, false, false, forWebSocket, null, null, null);
+	
+	    int followUpCount = 0;
+	    while (true) {
+	      if (canceled) {
+	        engine.releaseStreamAllocation();
+	        throw new IOException("Canceled");
+	      }
+	
+	      boolean releaseConnection = true;
+	      try {
+	        engine.sendRequest();
+	        engine.readResponse();
+	        releaseConnection = false;
+	      } catch (RequestException e) {
+	        // The attempt to interpret the request failed. Give up.
+	        throw e.getCause();
+	      } catch (RouteException e) {
+	        // The attempt to connect via a route failed. The request will not have been sent.
+	  ...省略     
+	    }
+	  }  
+
+可见，最终的请求的发起是HttpEngine.sendRequest方法执行的，返回体是HttpEngine.readResponse方法得到的。    
+
+**sendRequest缓存策略：**  
+
+	public void sendRequest() throws RequestException, RouteException, IOException {
+	   if (cacheStrategy != null) return; // Already sent.
+	   if (httpStream != null) throw new IllegalStateException();
+	   //请求头部添加
+	   Request request = networkRequest(userRequest);
+	   //获取client中的Cache,同时Cache在初始化的时候会去读取缓存目录中关于曾经请求过的所有信息。
+	   InternalCache responseCache = Internal.instance.internalCache(client);
+	   //cacheCandidate为上次与服务器交互缓存的Response
+	   Response cacheCandidate = responseCache != null
+	       ? responseCache.get(request)
+	       : null;
+	
+	   long now = System.currentTimeMillis();
+	   //创建CacheStrategy.Factory对象，进行缓存配置
+	   cacheStrategy = new CacheStrategy.Factory(now, request, cacheCandidate).get();
+	   //网络请求
+	   networkRequest = cacheStrategy.networkRequest;
+	   //缓存的响应
+	   cacheResponse = cacheStrategy.cacheResponse;
+	
+	   if (responseCache != null) {
+	    //记录当前请求是网络发起还是缓存发起
+	     responseCache.trackResponse(cacheStrategy);
+	   }
+	   if (cacheCandidate != null && cacheResponse == null) {
+	     closeQuietly(cacheCandidate.body()); // The cache candidate wasn't applicable. Close it.
+	   }
+	   //不进行网络请求并且缓存不存在或者过期则返回504错误
+	   if (networkRequest == null && cacheResponse == null) {
+	     userResponse = new Response.Builder()
+	         .request(userRequest)
+	         .priorResponse(stripBody(priorResponse))
+	         .protocol(Protocol.HTTP_1_1)
+	         .code(504)
+	         .message("Unsatisfiable Request (only-if-cached)")
+	         .body(EMPTY_BODY)
+	         .build();
+	     return;
+	   }
+	   // 不进行网络请求，而且缓存可以使用，直接返回缓存
+	   if (networkRequest == null) {
+	     userResponse = cacheResponse.newBuilder()
+	         .request(userRequest)
+	         .priorResponse(stripBody(priorResponse))
+	         .cacheResponse(stripBody(cacheResponse))
+	         .build();
+	     userResponse = unzip(userResponse);
+	     return;
+	   }
+	   //需要访问网络时
+	   boolean success = false;
+	   try {
+	     httpStream = connect();
+	     httpStream.setHttpEngine(this);
+	
+	     if (writeRequestHeadersEagerly()) {
+	       long contentLength = OkHeaders.contentLength(request);
+	       if (bufferRequestBody) {
+	         if (contentLength > Integer.MAX_VALUE) {
+	           throw new IllegalStateException("Use setFixedLengthStreamingMode() or "
+	               + "setChunkedStreamingMode() for requests larger than 2 GiB.");
+	         }
+	
+	         if (contentLength != -1) {
+	           // Buffer a request body of a known length.
+	           httpStream.writeRequestHeaders(networkRequest);
+	           requestBodyOut = new RetryableSink((int) contentLength);
+	         } else {
+	           // Buffer a request body of an unknown length. Don't write request headers until the
+	           // entire body is ready; otherwise we can't set the Content-Length header correctly.
+	           requestBodyOut = new RetryableSink();
+	         }
+	       } else {
+	         httpStream.writeRequestHeaders(networkRequest);
+	         requestBodyOut = httpStream.createRequestBody(networkRequest, contentLength);
+	       }
+	     }
+	     success = true;
+	   } finally {
+	     // If we're crashing on I/O or otherwise, don't leak the cache body.
+	     if (!success && cacheCandidate != null) {
+	       closeQuietly(cacheCandidate.body());
+	     }
+	   }
+	 }
+
+
 
