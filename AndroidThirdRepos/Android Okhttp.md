@@ -423,5 +423,117 @@ Cache用来设置缓存，当没有网络的时候，可以读取缓存的数据
 	   }
 	 }
 
+这里有很多的方法和封装，很多都看不懂，所以就挑几个重点的进行分析，了解一下Okhttp在发送请求的时候的缓存是如何进行的。  
+
+	//请求头部添加
+	   Request request = networkRequest(userRequest);
+	   //获取client中的Cache,同时Cache在初始化的时候会去读取缓存目录中关于曾经请求过的所有信息。
+	   InternalCache responseCache = Internal.instance.internalCache(client);
+	   //cacheCandidate为上次与服务器交互缓存的Response
+	   Response cacheCandidate = responseCache != null
+	       ? responseCache.get(request)
+	       : null;
+	
+	   long now = System.currentTimeMillis();
+	   //创建CacheStrategy.Factory对象，进行缓存配置
+	   cacheStrategy = new CacheStrategy.Factory(now, request, cacheCandidate).get();
+	   //网络请求
+	   networkRequest = cacheStrategy.networkRequest;
+	   //缓存的响应
+	   cacheResponse = cacheStrategy.cacheResponse;  
+
+首先是先对我们的request添加一些头部：因为我们在对Request进行配置的时候最多就添加几个要求的Header，但是，如果我们去抓取一个Http请求的话，会发现有很多默认的通用的Header在上面，这里的工作就是这样。  
+
+**InternalCache responseCache = Internal.instance.internalCache(client)**这里应该是获取我们在OkhttpClient中设置的缓存中的内容的，其中
+我们可以认为Cache中保存的形式是Map的形式，key就是请求中url的md5，所以我们根据当前的request获取的cacheCandidate就是如果之前对该地址进行过网络发起过访问的话的缓存。
+
+而后面获取的CacheStrategy，我们先看看这个类：  
+
+	public final class CacheStrategy {
+	  /** The request to send on the network, or null if this call doesn't use the network. */
+	  public final @Nullable Request networkRequest;
+	
+	  /** The cached response to return or validate; or null if this call doesn't use a cache. */
+	  public final @Nullable Response cacheResponse;
+	
+	  CacheStrategy(Request networkRequest, Response cacheResponse) {
+	    this.networkRequest = networkRequest;
+	    this.cacheResponse = cacheResponse;
+	  }
+	  ...
+	}  
+  
+可见，只有在networkRequest不为空的时候才会发起网络请求  
+
+**readResponse策略：**  
+
+	public void readResponse() throws IOException {
+	  ...省略
+	  else{
+	    //读取网络响应
+	    networkResponse = readNetworkResponse();
+	  }
+	  //将响应头部存入Cookie中
+	  receiveHeaders(networkResponse.headers());
+	
+	  // If we have a cache response too, then we're doing a conditional get.
+	  if (cacheResponse != null) {
+	  //检查缓存是否可用，如果可用。那么就用当前缓存的Response，关闭网络连接，释放连接。
+	    if (validate(cacheResponse, networkResponse)) {
+	      userResponse = cacheResponse.newBuilder()
+	          .request(userRequest)
+	          .priorResponse(stripBody(priorResponse))
+	          .headers(combine(cacheResponse.headers(), networkResponse.headers()))
+	          .cacheResponse(stripBody(cacheResponse))
+	          .networkResponse(stripBody(networkResponse))
+	          .build();
+	      networkResponse.body().close();
+	      releaseStreamAllocation();
+	
+	      // Update the cache after combining headers but before stripping the
+	      // Content-Encoding header (as performed by initContentStream()).
+	      InternalCache responseCache = Internal.instance.internalCache(client);
+	      responseCache.trackConditionalCacheHit();
+	      // 更新缓存
+	      responseCache.update(cacheResponse, stripBody(userResponse));
+	      userResponse = unzip(userResponse);
+	      return;
+	    } else {
+	      closeQuietly(cacheResponse.body());
+	    }
+	  }
+	
+	  userResponse = networkResponse.newBuilder()
+	      .request(userRequest)
+	      .priorResponse(stripBody(priorResponse))
+	      .cacheResponse(stripBody(cacheResponse))
+	      .networkResponse(stripBody(networkResponse))
+	      .build();
+	
+	  if (hasBody(userResponse)) {
+	    maybeCache();
+	    userResponse = unzip(cacheWritingResponse(storeRequest, userResponse));
+	  }
+	}  
+
+读取相应的代码比较简单，其中一个重点是如何判断相应是否过期的：  
+
+	private static boolean validate(Response cached, Response network) {
+	//如果服务器返回304则缓存有效
+	  if (network.code() == HTTP_NOT_MODIFIED) {
+	    return true;
+	  }
+	 //通过缓存和网络请求响应中的Last-Modified来计算是否是最新数据，如果是则缓存有效
+	  Date lastModified = cached.headers().getDate("Last-Modified");
+	  if (lastModified != null) {
+	    Date networkLastModified = network.headers().getDate("Last-Modified");
+	    if (networkLastModified != null
+	        && networkLastModified.getTime() < lastModified.getTime()) {
+	      return true;
+	    }
+	  }
+	  return false;
+	}  
+
 
 
