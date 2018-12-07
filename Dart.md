@@ -55,10 +55,19 @@ Dart中以**下划线开头的标识符是私有的**，**除此之外都是公�
 
 ### 常见的类型  
 #### 数字  
-Dart 中的数字是 num，它有两个子类型 int 和 double，int 是任意长度的整数，double 是双精度浮点数。一般情况下，主要应该使用 num 和 int 类型，double 很少使用（因为它限制输入只能是 double 而不能是 int）。注意，数字类型也是对象，因此可以在数字上调用各种方法。  
+Dart 中的数字是 num，它有两个**子类型 int 和 double**，int 是任意长度的整数，double 是双精度浮点数。一般情况下，主要应该使用 num 和 int 类型，double 很少使用（因为它限制输入只能是 double 而不能是 int）。注意，数字类型也是对象，因此可以在数字上调用各种方法。 **num 类型定义了基本的操作符，例如 +, -, /, 和 *， 还定义了 abs()、 ceil()、和 floor() 等 函数;不仅如此还有类函数int.prase(String)等。**    
+
+	var one = int.prase('1');
+	int two = int.prase('2');
+  
+#### 字符串  
+Dart中的字符串是**Strings**,Dart中的字符串是UTF-16编码的字符串，可以使用单引号也可以使用双引号，且支持三个单引号的多行字符串。**字符串前面加上r前缀代表原始字符串(任何转义字符都失效)**  
+
+	var s = r"In a raw string, even \n isn't special.";  
+
 
 #### 布尔  
-Dart 中的 bool 类型只有 true 和 false。在检查模式下，任何其它类型的对象都不能当作 bool 类型来使用；在生产模式下，非 bool 类型的对象都被当作 false。这点与 JavaScript 不同，但这样的规则更简单、清晰，不容易犯错。  
+Dart 中的 bool 类型只有 true 和 false。**在检查模式下，任何其它类型的对象都不能当作 bool 类型来使用；在生产模式下，非 bool 类型的对象都被当作 false(不管哪种模式表示为true的只有bool中的true)**。这点与 JavaScript 不同，但这样的规则更简单、清晰，不容易犯错。  
 
 #### List 和 Map  
 Dart 语言中内置了常用的 List 和 Map 。List 是 Collection 的子类型，另外 Queue 和 Set 也是 Collection 的子类型 。  
