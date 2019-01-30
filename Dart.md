@@ -12,7 +12,11 @@ Dart语言是动态类型的。我们可以编写和运行**完全没有类型�
 * 给人看的文档。明智地放置类型标注可以使别人更容易地阅读你的代码
 * 给机器看的文档。工具可以有多种方式利用类型标注。特别是，它们可以在 IDE 中帮助提供很好的特性，如名称补全和增强的导航。
 * 早期的错误检测。Dart 提供了静态检查器，它可以警告你潜在的问题，而不用你自己查。另外，在检查模式下，Dart 自动把类型标注转换为运行时断言检查来辅助调试。
-* 有时，在编译到 JavasSript 时，类型可以帮助改进性能。
+* 有时，在编译到 JavasSript 时，类型可以帮助改进性能。  
+
+> 总之：Dart是一门类型可选语言：  
+> 1. 类型在语法层面来说是可选的  
+> 2. 类型对于运行时语义没有影响
 
 ### 静态检查器  
 静态检查器（static checker）行为很像 C 中的链接。它在编译时警告你潜在的问题。这些警告中的很多是和类型相关的。静态检查器不会产生错误——不论检查器说什么，你总是可以编译和运行你的代码。  
@@ -51,20 +55,48 @@ Dart中声明变量：
 Dart支持顶层的变量和函数，并不一定把所有的东西都放到类中。  
 
 Dart中以**下划线开头的标识符是私有的**，**除此之外都是公有的**。  
->这里的**私有单元不是类，而是库**。也就是说，在同一个库中可见，私有只是对库的外部不可见。   
+>这里的**私有单元不是类，而是库**。也就是说，在同一个库中可见，私有只是对库的外部不可见。     
 
-### 常见的类型  
+在Dart中也可以定义final变量，**final类变量必须在定义的时候初始化；final实例变量可以在定义的时候初始化，也可以在构造器中初始化**  
+
+> **final和const辨析：Dart支持final和const：final表示赋值之后不可变，而const修饰的量表示编译时常量(const隐含final的不可变特征，这就限定了const修饰的只能是num和string的变量)**。const的作用就好像C语言中的宏定义一样，将一个使用多次的值声明为一个变量名，方便后续的使用
+
+> 另外注意一下名称区别：const test = 1；这个语句中**test为常量(constant variable)，而1位常量值(constant value)**.这就引出了const关键字的另一个作用：**除了修饰变量表示常量外，const还可以修饰一个对象，表示常量值**
+> 
+> var val = const [];//--1
+> 
+> const val2 = [];//--2
+> 
+> final val3 = const [];//--3
+> 
+> 上面的3个语句中2和3是等价的。
+
+### 固有的类型    
+
+Dart中有几个**固有类型(build-in type):numbers、lists、maps、booleans、runes、symbols、strings**  
+固有类型和普通的类型之间的区别我们可见简单的理解为：**固有类型的对象可以直接通过一个字面量来创建**，而其他的类型必须显示的使用构造函数来创建。例如：  
+
+	var test = 1;  //1是一个字面量，同时也是一个int对象
+	var a = new Parent();  //a是一个普通的类型的对象，必须使用构造函数来创建
+
 #### 数字  
 Dart 中的数字是 num，它有两个**子类型 int 和 double**，int 是任意长度的整数，double 是双精度浮点数。一般情况下，主要应该使用 num 和 int 类型，double 很少使用（因为它限制输入只能是 double 而不能是 int）。注意，数字类型也是对象，因此可以在数字上调用各种方法。 **num 类型定义了基本的操作符，例如 +, -, /, 和 *， 还定义了 abs()、 ceil()、和 floor() 等 函数;不仅如此还有类函数int.prase(String)等。**    
 
 	var one = int.prase('1');
 	int two = int.prase('2');
+
+> **Dart中的int类型范围是-2的63次幂至2的63次幂-1**
   
 #### 字符串  
 Dart中的字符串是**Strings**,Dart中的字符串是UTF-16编码的字符串，可以使用单引号也可以使用双引号，且支持三个单引号的多行字符串。**字符串前面加上r前缀代表原始字符串(任何转义字符都失效)**  
 
-	var s = r"In a raw string, even \n isn't special.";  
+	var s = r"In a raw string, even \n isn't special.";    
 
+同样字符串也支持内嵌一个表达式，想Kotlin那样使用**${expression}**的形式来使用，如果表达式只是一个变量的话，可以省略掉花括号：  
+
+	var test = "this is expression";
+	print("${test.toUpperCase()} !!!!");
+	//输出的结果就是：THIS IS EXPRESSION !!!!
 
 #### 布尔  
 Dart 中的 bool 类型只有 true 和 false。**在检查模式下，任何其它类型的对象都不能当作 bool 类型来使用；在生产模式下，非 bool 类型的对象都被当作 false(不管哪种模式表示为true的只有bool中的true)**。这点与 JavaScript 不同，但这样的规则更简单、清晰，不容易犯错。  
@@ -79,6 +111,18 @@ Map 的字面量语法要求 key 必须字符串，但如果是用构造函数�
   		'two': 2
 	};  
 	var m=new Map<int,int>(){1:1};
+
+#### Runes  
+
+> 补充：Unicode、UTF-8、UTF-16、UTF-32关系  
+> **unicode 只是一种字符码表， 而在计算机中进行存储时， 必须指定一种具体的存储方式。常见的如utf8, utf16, utf32。而UTF-8会将一个unicode字符扩充为1至4个字节来保存到计算机中；而UTF-16则扩充为2个或者4个字节来保存；UTF-32将其扩充为4个字节来保存**
+
+在Dart中，**符文(Runes)是字符串的UTF-32代码点，而Dart中的字符串却是以UTF-16来保存的**，Strings对象的**codeUnits和runes属性分别返回其UTF-16码和UTF-32码的十进制值**  
+
+	var clapping = '\u{1f44f}';
+	  print(clapping.codeUnits); //[55357, 56399]
+	  print(clapping.runes);  //(128079)
+
 
 ### 三、函数  
 Dart中的最普通的函数在定义的时候和Java中的方法在定义的时候别无二致，**在Dart中如果一个函数没有return语句指定返回值的话，并不像Java一样需要声明void，这时候会默认返回null**   
@@ -106,12 +150,12 @@ Dart中的最普通的函数在定义的时候和Java中的方法在定义的时
 >理解上面的把函数赋值给一个对象：之前说过，在Dart中任何东西都是对象，函数也是，函数是Function类型的对象，所以讲一个Function类型的对象赋值给一个var变量就说的过去了。  
 
 #### 可选参数  
-**Dart 支持两种类型的可选参数，命名(named)可选参数和位置(positional)可选参数，但不能同时使用。可选的参数可以设置默认值，默认值要求是编译时常量，没有设置的可选参数默认值是 null 。**  
+**Dart 支持两种类型的可选参数，命名(named)可选参数和位置(positional)可选参数，但不能同时使用。可选的参数可以设置默认值，默认值要求是编译时常量(Strings、num的字面量或者const修饰的常量值)，没有设置的可选参数默认值是 null 。**
 
 ##### 命名可选参数  
-命名可选参数使用大括号的语法，默认值用冒号指定。在使用的时候，多个可选参数可以任意指定其中的 0 个或多个，并且与指定的先后顺序无关，但参数值前必须指定参数名。所以参数名也成了 API 的一部分，就像函数的命名一样，你需要多花点时间认真考虑参数名。  
+命名可选参数在**定义时使用大括号的语法，默认值用等号(老的版本用冒号)指定**。在**使用的时候，多个可选参数可以任意指定其中的 0 个或多个，并且与指定的先后顺序无关，但参数值前必须指定参数名**。所以参数名也成了 API 的一部分，就像函数的命名一样，你需要多花点时间认真考虑参数名。  
 
-	foo (a, {b, c: 3, d: 4, e}) {
+	foo (a, {b, c= 3, d= 4, e}) {
   		print("$a  $b  $c  $d  $e");
 	}  
 	main() {
@@ -120,8 +164,10 @@ Dart中的最普通的函数在定义的时候和Java中的方法在定义的时
   		foo(1, e: 5, c: 1);
 	}  
 
+> 命名可选参数也可以在前面加上**@Required注释来规定为必传参数**  
+
 ##### 位置可选参数  
-位置可选参数使用方括号的语法，默认值用等号指定。在使用的时候，不能定参数名，参数的先后顺序必需与定义的顺序一致，**只能省略后面的参数。**  
+位置可选参数**在定义时使用方括号的语法，默认值用等号指定**。在**使用的时候，不能定参数名，参数的先后顺序必需与定义的顺序一致**，**只能省略后面的参数。**  
 
 	foo (a, [b, c=3, d=4, e]) {
   		print("$a  $b  $c  $d  $e");
@@ -137,7 +183,24 @@ Dart中的最普通的函数在定义的时候和Java中的方法在定义的时
 	}  
 
 #### 匿名函数  
-匿名函数也可以被叫做lambda、closure闭包，其在定义的时候和普通的函数是一样的，只是没有名字而已。
+匿名函数也可以被叫做lambda、closure闭包，其在定义的时候和普通的函数是一样的，只是没有名字而已。  
+
+闭包有一个用处就是保存变量：  
+
+	Function makeAdder(num addBy) {
+	  return (num i) => addBy + i;
+	}
+	
+	void main() {
+	  // Create a function that adds 2.
+	  var add2 = makeAdder(2);
+	
+	  // Create a function that adds 4.
+	  var add4 = makeAdder(4);
+	
+	  assert(add2(3) == 5);
+	  assert(add4(3) == 7);
+	}
 
 ## 四、操作符
 ### 1. 相等  
@@ -151,6 +214,9 @@ Dart中判断内容相等与否使用**==**，而判断是否是同**identical()
 
 	b ??= 1  
 
+### 4. 测试是否为null
+Dart中还有一个独特的二元操作符：**expr1 ？？ expr2**。这个操作符的意思是，如果expr1的结果是null，则返回expr2的结果，否则返回expr1的结果
+
 ## 五、面向对象  
 ### 5.1 类和接口  
 
@@ -161,6 +227,8 @@ Dart 中的类和 Java 类似，用 class 关键字定义一个类，用 extends
 ### 5.2 方法  
 
 和其它语言一样，Dart 使用点号(.)引用一个对象上的方法或字段。另外，Dart 还支持使用两个点号**(..)进行级联调用（cascade operator）**，级联调用和普通方法调用一样，但是它**并不返回方法的返回值，而是返回调用对象自身**，这样你就可以连续调用同一个对象上的多个方法了。级联调用是语言层面的支持，不需要你特意设计 API 让方法返回自身。  
+
+Dart中定义抽象方法的形式为：**普通方法名+参数列表+；**，即没有方法体，取而代之的是以分号结尾
 
 ### 5.3 字段和getter/setter  
 
@@ -188,11 +256,26 @@ Dart 中的类和 Java 类似，用 class 关键字定义一个类，用 extends
 
 上面也可以通过rect.right访问一个right变量，虽然我们没有在定义类的时候显示的定义这个成员。  
 
-> 注意：getter和setter在定义的时候和普通的函数有一个差别就是get(作为方法名)后面试变量名，之后才是参数列表
+> 注意：getter和setter在定义的时候和普通的函数有一个差别就是get(作为方法名)后面试变量名，之后才是参数列表  
+> **关于getter和setter的思考：**getter和setter的存在像是一种语法糖，方便我们维护代码，**所有的属性都由编译器默认添加或者认为显示定义getter和setter(常量没有setter)，getter和setter对类变量和实例变量都有效**
 
 ### 5.4 静态方法和静态变量  
 
-静态变量和静态方法的定义和一般使用同Java一样，有一点不一样的是**Dart中普通的方法内部也可以访问静态成员**  
+静态变量和静态方法的定义和一般使用同Java一样，有一点不一样的是**Dart中普通的方法内部也可以访问静态成员**   
+
+还有一点是：**Dart中的静态变量(类变量和顶层变量)有延迟初始化的特点，即在getter第一次被调用的时候才执行初始化**，延迟初始化可能会带来一些问题，例如下面：  
+
+	class Cat{}
+	class DeadCat extends Cat{}
+	class LiveCat extends Cat{
+		LiveCat(){print("I am alive");}
+	} 
+	var test = new LiveCat();
+	main() {
+		test = new DeadCat();
+	}
+
+这里的test是一个顶层变量，所以由于延迟初始化，LiveCat的构造器并不会被访问，其中的print也不会被调用
 
 ### 5.5 构造函数  
 
@@ -200,8 +283,11 @@ Dart 中的类和 Java 类似，用 class 关键字定义一个类，用 extends
 
 1. 创建对象
 2. 设置声明时初始化的实例变量的值
-3. 执行构造函数初始化列表，以及显示或隐式调用超类的构造函数
-4. 执行构造函数
+3. 执行构造函数初始化列表
+4. 显示或隐式调用超类的构造函数
+5. 执行构造函数
+
+**构造函数没有继承性**
 
 初始化变量的特殊用法：**this.field**  
 
@@ -211,10 +297,31 @@ Dart 中的类和 Java 类似，用 class 关键字定义一个类，用 extends
 	}  
 	Rectangle.rec(this.height,this.width);
 
-上面两种初始化变量的构造函数是等价的。
+上面两种初始化变量的构造函数是等价的。  
+
+> **注意：对于final修饰的成员变量，想要通过构造器进行初始化必须得使用简写的形式，而不是传统的类似于Java那种在构造函数的函数体中通过this.赋值操作进行，原因是final没有setter方法，所以赋值操作不可行。所以二者其实并不等价。说白了就是简写形式对变量进行初始化并没有调用setter**
 
 #### 初始化列表  
-在构造函数体执行之前除了可以调用超类构造函数之外，还可以初始化实例参数，使用逗号分隔
+在构造函数体执行之前除了可以调用超类构造函数之外，还可以初始化实例参数，使用逗号分隔，**使用的形式是在构造函数的参数列表之后、函数体之前，以冒号开始进行赋值操作**。  
+
+上面说过，初始化列表的执行时间在构造函数方法体之前，但是比在类中定义成员时初始化要晚：  
+
+	class Parent {
+	  var x = 1;
+	  Parent(): x = 2;
+	  Parent.test(): x = 2{
+	    this.x = 3;
+	  }
+	}
+	main(List<String> args) async {
+	  var p = Parent();
+	  print("p.x = ${p.x}");
+	  var pp = Parent.test();
+	  print("pp.x = ${pp.x}");
+	}  
+	------------
+	output：p.x = 2
+			pp.x = 3
 
 #### 命名构造函数  
 
@@ -246,11 +353,13 @@ Dart 中的**构造函数不会被继承**。如果子类的构造函数没有�
   		static final ImmutablePoint origin = const ImmutablePoint(0, 0); // 创建一个常量对象
 	}  
 
->**注意：创建一个常量对象时，不使用 new constructor，而是使用 const constructor **  
+通过const constructor的方法调用常量构造函数是，如果多次调用该构造函数**传入的参数都是一样**的，那么这多次调用**生成的只有同一个对象**
+
+>**注意：创建一个常量对象时，不使用 new constructor，而是使用 const constructor **    
 
 #### 工厂构造函数  
 
-前面介绍的构造函数都属于生成式的构造函数，即语言替你完成对象的创建和返回，你只需要在构造函数中对这个刚刚创建出来的对象做一些初始化工作即可。但有时候为了更加灵活地创建一个对象，比如返回一个之前已经创建过的缓存对象，那么生成式构造函数就不能满足要求了。工厂模式已经在其它语言中被广泛使用，一般是通过一个静态方法实现的，由你自己来负责创建对象并返回它。在 Dart 中，使用关键字 factory 就可以定义一个工厂构造函数，也是由你自己来负责创建对象并返回它。但好处是它依然使用 new constructor() 的形式，这样使用工厂构造函数和使用普通构造函数在形式上没有区别  
+前面介绍的构造函数都属于生成式的构造函数，即语言替你完成对象的创建和返回，你只需要在构造函数中对这个刚刚创建出来的对象做一些初始化工作即可。但有时候为了更加灵活地创建一个对象，比如返回一个之前已经创建过的缓存对象，那么生成式构造函数就不能满足要求了。工厂模式已经在其它语言中被广泛使用，一般是通过一个静态方法实现的，由你自己来负责创建对象并返回它。在 Dart 中，使用关键字 factory 就可以定义一个工厂构造函数，也是由你自己来负责创建对象并返回它。但好处是它**依然使用 new constructor() 的形式**，这样使用工厂构造函数和使用普通构造函数在形式上没有区别  
 
 	class Symbol {
   		final String name;
@@ -273,7 +382,9 @@ Dart 中的**构造函数不会被继承**。如果子类的构造函数没有�
   		Symbol._internal(this.name);
 	}
 
-工厂构造函数不仅可以返回一个缓存的对象，也可以返回一个类的子类型。所以一个抽象类/接口可以定义一个工厂构造函数，返回它的默认实现。比如在 Dart 的核心库中就普遍采用这种形式，Map 被认为是个接口，可以有多种实现，new Map() 会返回 Map 的一个默认实现的实例。其实，在**工厂构造函数中你可以返回任何对象，不过在检查模式下要求返回一个类的子类型。**  
+工厂构造函数不仅可以返回一个缓存的对象，也可以返回一个类的子类型。所以一个抽象类/接口可以定义一个工厂构造函数，返回它的默认实现。比如在 Dart 的核心库中就普遍采用这种形式，Map 被认为是个接口，可以有多种实现，new Map() 会返回 Map 的一个默认实现的实例。其实，在**工厂构造函数中你可以返回任何对象，不过在检查模式下要求返回一个类的子类型。**   
+
+> **注意：工厂构造函数里面不能通过this来访问任何成员** 
 
 ## 六、异步编程  
 
@@ -295,7 +406,7 @@ Dart 库中有很多返回**Future 或者 Stream 对象**的方法。 这些方�
 * 使用async和一个异步for循环(await for)  
 * 使用Stream API  
 
-**要使用await，其方法必须带有async关键字**  
+**要使用await，其所在的方法必须带有async关键字**  
 
 	checkVersion() async {
 	  var version = await lookUpVersion();
@@ -306,7 +417,9 @@ Dart 库中有很多返回**Future 或者 Stream 对象**的方法。 这些方�
 	  }
 	}  
 
-> **简单的形式上：async用来获取Future对象，await用来操作Future对象**
+**await表达式中，表达式的值通常是一个Future对象，如果不是就自动封装到Future对象中(作为Future对象的泛型)**  
+
+	Future<String> lookUpVersion() async => '1.0.0';
 
 我们可以通过 then() 方法注册一个回调函数在成功执行完成时调用，并获得返回值。如果执行失败，则会抛出异常。另外也可以通过 handleException() 注册遇到异常时执行的回调函数，如果这个回调函数返回 true ，那么 Future 认为异常已被很好地处理了就不再抛出异常，否则还是会抛出异常。但一般不必注册 handleException，因为异常会正常抛出给外面的代码。onComplete 注册的回调函数不管成功还是失败都会执行。  
 
@@ -445,3 +558,93 @@ send() 方法的第一个参数就是要发送的消息。另外，send() 方法
 	}  
 
 >看了上面的分析，可能对这种sendPort和ReceivePort的方式有点蒙蔽，实际上在我看来这是一种代理的方式：在send的示例中，可以指定第二个参数来指明接受者的发送地址，注意到那个发送的sendPort是来自spawnFunction函数创建的新Isolate的默认接收端口；而且，指定给接收方的返回端口是发送方Isolate内部的一个ReceivePort生成的一个sendPort()；也就是说，**实现通信的sendPort都是最终接收方(ReceivePort)生成的**，就像代理一样，最终是实现功能的都是别人的东西，这样一来，用别人提供的端口来和人家进行通信就看的合情合理了
+
+## 八、Throw、Catch、Finally  
+Dart中也支持抛出、抓取异常，Dart和java相反，**所有的异常都是unchecked的异常**，而且**Dart中可以抛出任何非空的对象**，不局限于Exception及其子类的对象：  
+
+	throw Exception("this is normal exception");  //典型的抛出
+	throw "this is Dart`s special";  //这里抛出了一个字符串    
+
+还有一点是：**throw是一个语句，所以可以在任何地方出现**  
+
+	void distanceTo(Point other) => throw UnimplementedError();  
+
+### 8.1 捕获异常  
+Dart中捕获异常的有两个关键字：**on和catch**  
+
+我们可以使用其中的一个，也可以同时使用，区别就是：on后面必须紧跟一个类型，表示捕获该类型的异常；而catch后面有两个参数e和s,e表示捕获的异常对象，s表示StackTrace对象。总之**on实现处理特定的异常；catch则可以得到异常对象本身，因此可以获取异常对象的信息或对其进行处理**。因此传统的Java中catch的功能在Dart中就得同时使用on和catch才能实现：  
+
+	try {
+	  breedMoreLlamas();
+	} on OutOfLlamasException {
+	  // A specific exception
+	  buyMoreLlamas();
+	} on Exception catch (e) {
+	  // Anything else that is an exception
+	  print('Unknown exception: $e');
+	} catch (e) {
+	  // No specified type, handles all
+	  print('Something really unknown: $e');
+	}  
+
+在dart中如果catch没有处理完，可以**使用rethrow直接将该异常继续抛出**：  
+
+	void misbehave() {
+	  try {
+	    dynamic foo = true;
+	    print(foo++); // Runtime error
+	  } catch (e) {
+	    print('misbehave() partially handled ${e.runtimeType}.');
+	    rethrow; // Allow callers to see the exception.
+	  }
+	}   
+
+## 九、泛型  
+Dart中的泛型和Java大体上用法和特性都一样，这里只说几个不同点  
+
+#### 不同点一  
+Dart中的泛型是**保存有类型信息的，相反java中使用类型擦除来实现泛型**，这就意味着，下面的代码在dart中是完全有意义的：  
+
+	var list = List<String>();
+	assert(list is List<String>);
+
+#### 不同点二  
+在Dart中直接使用List、Map的字面量的时候也可以指定泛型：  
+
+	var list = <String>["name","name2"];
+	var map = <String,String>{"key1":"value1","key2":"value2"};
+
+## 十、import  
+Dart中导入包使用import来导入，以dart作为scheme时导入的是内置的包，以package为scheme时导入的是对应目录下的文件：  
+
+	import 'dart:html';
+	import 'package:lib1/lib1.dart';
+	import 'package:lib2/lib2.dart' as lib2;  //as后面的名字用来解决两个模块中类的冲突  
+	// Import only foo.
+	import 'package:lib1/lib1.dart' show foo;
+
+	// Import all names EXCEPT foo.
+	import 'package:lib2/lib2.dart' hide foo;  
+
+Dart中的import中一个很大的亮点是可以实现懒加载(也叫延迟加载)，即只有在用到的时候才去加载对应的库，这就节省了程序加载的时间，import实现懒加载只要在后面加上**deferred as**就行了，在使用的时候要先调用该**库的loadLibrary()方法**，之后就可以使用了。  
+
+	import 'package:greetings/hello.dart' deferred as hello;
+	Future greet() async {
+	  await hello.loadLibrary();
+	  hello.printGreeting();
+	}  
+
+> **提示：loadLibrary()方法可以被调用多次，但是不会出现问题，而且即使调用了多次，实际上也只会被加载一次**    
+> 1. Dart隐式地将loadLibrary（）插入到使用deferred as namespace定义的命名空间中,loadLibrary（）函数返回Future。  
+> 2. 不可以使用延迟加载的库中的类  
+
+ 
+
+
+
+
+
+	
+
+
+
