@@ -138,6 +138,9 @@ Flutter提供了许多widgets，可帮助您构建遵循Material Design的应用
 
 ## 二、widget学习  
 在看了官方文档的布局教程后，对Flutter中的布局的构建和一些常用的widget以及其属性有了认识  
+
+将Widget分为两类，一类是**Layout Widget，这类Widget含有child或者children属性**，也就是可以含有子Widget，对应于原生中的layout控件；另一类是**Visiable Widget**，就是不含child不含children属性的Widget，对应于原生中普通的View。
+
 ### 2.1 布局中的常客--Row(行)、Column(列)  
 在教程中没有将这两个widget列入**布局widget**中，但是我觉得这两个和其他的布局widget一样，都是**管理普通的widget**。    
 将普通的widget添加在Row或者Column中可以通过**设置对齐、调整、聚集**来对包含在其中的widget进行管理。  
@@ -159,7 +162,25 @@ Flutter提供了许多widgets，可帮助您构建遵循Material Design的应用
 调整widget的场景是，想要实现类似于match_parent的效果、想要实现LinearLayout的layout_weight的功能。  
 这些可以通过将widget包裹在**Expanded**中来实现：  
 首先，Expanded自动就有**填充方向上的空余空间的效果**，其次可以通过设置**flex(LinearLayout的layout_weight)属性**来设置widget的弹性系数。  
-> **Row和Column子控件有灵活与不灵活的两种，Row和Column首先列出不灵活的子控件，减去它们的总宽度，计算还有多少可用的空间。然后Row按照Flexible.flex属性确定的比例在可用空间中列出灵活的子控件。要控制灵活子控件,需要使用Flexible控件**
+> **Row和Column子控件有灵活与不灵活的两种，Row和Column首先列出不灵活的子控件，减去它们的总宽度，计算还有多少可用的空间。然后Row按照Flexible.flex属性确定的比例在可用空间中列出灵活的子控件。要控制灵活子控件,需要使用Flexible控件**  
+
+	Row(
+	  crossAxisAlignment: CrossAxisAlignment.center,
+	  children: [
+	    Expanded(
+	      child: Image.asset('images/pic1.jpg'),
+	    ),
+	    Expanded(
+	      flex: 2,
+	      child: Image.asset('images/pic2.jpg'),
+	    ),
+	    Expanded(
+	      child: Image.asset('images/pic3.jpg'),
+	    ),
+	  ],
+	);  
+
+![](https://flutter.io/assets/ui/layout/row-expanded-visual-fa9a01df7b96ba5cb33162b91369658fea86554139953e3cc0357de83281133d.png)
 
 #### 2.1.3 聚集widget  
 默认情况下，行或列沿着其主轴会尽可能占用尽可能多的空间，但如果要将孩子紧密聚集在一起，可以将**mainAxisSize**设置为MainAxisSize.min。 以下示例使用此属性将星形图标聚集在一起（如果不聚集，五张星形图标会分散开）。  
@@ -665,7 +686,13 @@ Dart是单线程执行模型，支持Isolates(在另一个线程上运行Dart代
 		assets:  
 			- images/lake.jpg  
 
-这里是通过**assets**声明了资源，每个资源都通过**相对于pubspec.yaml文件所在位置的显式路径进行标识。**  
+这里是通过**assets**声明了资源，每个资源都通过**相对于pubspec.yaml文件所在位置的显式路径进行标识。**如果想要导入某一个目录下所有的资源，那么以/结尾即可：  
+
+	flutter:
+	  assets:
+	    - assets/  
+
+以上代码就表示导入assets目录下所有的资源
 
 在构建期间，Flutter将asset放置到称为 **asset bundle** 的特殊存档中，应用程序可以在运行时读取它们。
 
@@ -694,10 +721,12 @@ Dart是单线程执行模型，支持Isolates(在另一个线程上运行Dart代
 
 有两种主要方法允许从Asset bundle中加载字符串/text（loadString）或图片/二进制（load）。
 
+这两种方式访问资源都需要提供一个key来映射到yaml中的路径。
+
 #### 加载文本assets  
 每个Flutter应用程序都有一个**rootBundle对象**， 可以轻松访问主资源包。可以直接使用**package:flutter/services.dart**中全局静态的**rootBundle**对象来加载asset。
 
-但是，建议使用**DefaultAssetBundle**来获取当前BuildContext的**AssetBundle**。 这种方法不是使用应用程序构建的默认asset bundle，而是使父级widget在运行时替换的不同的AssetBundle，这对于本地化或测试场景很有用。
+但是，建议使用**DefaultAssetBundle**来获取当前BuildContext的**AssetBundle**。 这种方法不是使用应用程序构建的默认asset bundle(当前app构建时对应的AssetBundle)，而是使父级widget在运行时替换的不同的AssetBundle，这对于本地化或测试场景很有用。
 
 通常，可以使用**DefaultAssetBundle.of()**从应用运行时间接加载asset（例如JSON文件）。
 
