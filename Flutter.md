@@ -1136,4 +1136,332 @@ itemBuilder对于在[index]中构建每个窗口控件的函数。因为我们�
       title: "谈天说地",
       theme: kDefaultTheme,
       home: new ChatScreen()
-    );
+    );  
+
+## 九、状态管理  
+Flutter中对于状态的管理的做法非常好，避免了对象的乱传造成的bug或者内存泄漏等问题。  
+
+想想我们在原生的Android中是如何实现记事本功能的：写完内容之后点击确认按钮，实际上是之前传过来RecyclerView的Adapter对象，然后调用该对象的回调，填写内容的界面和展示内容的界面是两个不同的界面，这样将对象传来传去势必会导致很多问题。对此我们并没有好的解决办法(或许依赖出入可以优化)。  
+
+Flutter就可以很优雅的解决这个问题：这一切都要依靠**scoped_model**这个包中的三个类：**Model、ScopedModel、ScopedModelDescendant**。  
+
+### 9.1 Model  
+Model类的作用是**封装状态(State)**的，目的是统一管理、多个Widget共享该类中封装的状态；多个Widget共同响应状态的改变。  
+
+实例就按照官方文档中的例子来说：  
+
+	class CartModel extends Model {
+	  /// Internal, private state of the cart.
+	  final List<Item> _items = [];
+	
+	  /// An unmodifiable view of the items in the cart.
+	  UnmodifiableListView<Item> get items => UnmodifiableListView(_items);
+	
+	  /// The current total price of all items (assuming all items cost $1).
+	  int get totalPrice => _items.length;
+	
+	  /// Adds [item] to cart. This is the only way to modify the cart from outside.
+	  void add(Item item) {
+	    _items.add(item);
+	    // This call tells [Model] that it should rebuild the widgets that
+	    // depend on it.
+	    notifyListeners();
+	  }
+	}  
+
+> **注意：当状态变量发生改变后，一定要调用notifyListeners()这个方法，该方法的作用就是通知所有使用了该Model中的状态的Widget进行rebuild(也就是后面要说的ScopedModelDescendant中的builder参数)**  
+
+### 9.2 ScopedModel  
+该类是一个**StatelessWidget**，其作用就是将Model和其child绑定起来，这样一来其child就可以使用Model中封装的状态来展示自己，同时也会根据状态的改变响应Model中的notifyListeners方法进行rebuild：  
+
+	void main() {
+	  final cart = CartModel();
+	
+	  // You could optionally connect [cart] with some database here.
+	
+	  runApp(
+	    ScopedModel<CartModel>(
+	      model: cart,
+	      child: MyApp(),
+	    ),
+	  );
+	}  
+
+> **如果一个App很复杂，需要多个Model的话，可以通过ScopedModel的嵌套来实现，即外层ScopedModel的child是另一个ScopedModel**  
+
+### 9.3 ScopedModelDescendant  
+Model的作用是封装状态，ScopedModel的作用是将状态绑定给child，那么child如何使用这个Model呢？其中的一种方法就是使用ScopedModelDescendant，**而ScopedModelDescendant也是一个Widget**：  
+
+	return ScopedModelDescendant<CartModel>(
+	  builder: (context, child, cart) => Stack(
+	        children: [
+	          // Use SomeExpensiveWidget here, without rebuilding every time.
+	          child,
+	          Text("Total price: ${cart.totalPrice}"),
+	        ],
+	      ),
+	  // Build the expensive widget here.
+	  child: SomeExpensiveWidget(),
+	);  
+
+介绍一下builder的三个参数：第一个参数就是上下文对象，第二个参数是child其实就是ScopedModelDescendant的第二个参数child，就是没有用到Model中状态的Widget，我们可以把他们创建到ScopedModelDescendant的child参数中，这样一来在Model中的状态发生改变的时候builder就可以直接通过其第二个参数得到这些不会因状态的改变而发生变化的部分布局直接使用；第三个参数就是封装装态的Model了  
+
+## 十、JSON  
+现在的App基本都要与网络打交道，JSON就是很好的传输数据的格式。  
+
+Flutter中实现JSON有两种大的方面：  
+
+* Use manual serialization for smaller projects  
+* Use code generation for medium to large projects  
+
+### 10.1 manual serialization  
+该中方式是使用Flutter中内置的**dart：convert**包来实现序列化和反序列化的  
+
+手动序列化也有两种形式：Serializing JSON inline和Serializing JSON inside model classes  
+
+#### 10.1.1  Serializing JSON inline  
+这种形式进行JsON是使用**dart：convert**包下的**Map<String,dynamic>  jsonDecode(String jsonString)**来讲Json字符串解析出来  
+
+	Map<String, dynamic> user = jsonDecode(jsonString);
+
+	print('Howdy, ${user['name']}!');
+	print('We sent the verification link to ${user['email']}.');  
+
+该方法用来测试JSON还好，在使用的时候有一个重大的问题就是，生成的**Map<String,dynamic>中的value类型是未知的**，也就**丧失了：类型安全等一些列优点**  
+
+#### 10.1.2 Serializing JSON inside model classes  
+看名字就可以猜到这是类似于原生中的讲JSON解析成一个JavaBean的形式：  
+
+	class User {
+	  final String name;
+	  final String email;
+	
+	  User(this.name, this.email);
+	
+	  User.fromJson(Map<String, dynamic> json)
+	      : name = json['name'],
+	        email = json['email'];
+	
+	  Map<String, dynamic> toJson() =>
+	    {
+	      'name': name,
+	      'email': email,
+	    };
+	}
+
+	Map userMap = jsonDecode(jsonString);
+	var user = new User.fromJson(userMap);
+	
+	print('Howdy, ${user.name}!');
+	print('We sent the verification link to ${user.email}.');  
+
+这样就解决了第一种方法中map的value类型未知的问题，在class model中对应字段的类型都已经定义了，也就是说如果json中name传递的是一个int，就会发生json解析异常  
+
+另外将User解析成JSON格式也非常简单：  
+
+	String json = jsonEncode(user);  
+  
+并没有用到User中的toJson()方法  
+
+该中方法实现JSON最大的毛病就是需要手动维护，可能会出现bug  
+
+### 10.2 code generation  
+该方法相较于之前的优点是**自动生成**，该方法使用的是**json_serializable**包  
+
+**pubspec.yaml**
+
+	dependencies:
+	  # Your other regular dependencies here
+	  json_annotation: ^2.0.0
+	
+	dev_dependencies:
+	  # Your other dev_dependencies here
+	  build_runner: ^1.0.0
+	  json_serializable: ^2.0.0  
+
+使用起来也非常简单：  
+
+	import 'package:json_annotation/json_annotation.dart';
+
+	/// This allows the `User` class to access private members in
+	/// the generated file. The value for this is *.g.dart, where
+	/// the star denotes the source file name.
+	part 'user.g.dart';
+	
+	/// An annotation for the code generator to know that this class needs the
+	/// JSON serialization logic to be generated.
+	@JsonSerializable()
+	
+	class User {
+	  User(this.name, this.email);
+	
+	  String name;
+	  String email;
+	
+	  /// A necessary factory constructor for creating a new User instance
+	  /// from a map. Pass the map to the generated `_$UserFromJson()` constructor.
+	  /// The constructor is named after the source class, in this case User.
+	  factory User.fromJson(Map<String, dynamic> json) => _$UserFromJson(json);
+	
+	  /// `toJson` is the convention for a class to declare support for serialization
+	  /// to JSON. The implementation simply calls the private, generated
+	  /// helper method `_$UserToJson`.
+	  Map<String, dynamic> toJson() => _$UserToJson(this);
+	}  
+
+还可以将一个JSON的字段**重命名**：  
+
+	/// Tell json_serializable that "registration_date_millis" should be
+	/// mapped to this property.
+	@JsonKey(name: 'registration_date_millis')
+	final int registrationDateMillis;  
+
+解析的时候和上一个方法是一样的：  
+
+	Map userMap = jsonDecode(jsonString);
+	var user = User.fromJson(userMap);  
+
+## 十一、Flutter中的动画  
+
+看了官网的教程，依然很迷茫，再看着中文网的翻译，有了点简单的理解  
+
+### 1. Animation  
+
+Animation这个类是动画的核心类，但是Animation并不直接去参与到UI动画的构建中去，**Animation中保存了状态(State)和值(value)**，我们可以获取Animation的值来**指导UI的构建或者变化**，这就形成了我们看到的动画效果。  
+
+	abstract class Animation<T> extends Listenable implements ValueListenable<T> {
+	 2  const Animation();
+	 3
+	 4  @override
+	 5  void addListener(VoidCallback listener);
+	 6
+	 7  @override
+	 8  void removeListener(VoidCallback listener);
+	 9
+	10  void addStatusListener(AnimationStatusListener listener);
+	11
+	12  void removeStatusListener(AnimationStatusListener listener);
+	13
+	14  AnimationStatus get status;
+	15
+	16  @override
+	17  T get value;
+	18
+	19  bool get isDismissed => status == AnimationStatus.dismissed;
+	20
+	21  bool get isCompleted => status == AnimationStatus.completed;
+	22}     
+
+值得注意的是**外部的对象只能够读State和value，并不能修改他们，因为只提供了getter**。  
+
+State是一个num类，其值有四个：  
+
+* **dismiss：**代表动画结束了，而且当前的帧停留在了动画过程中的第一个帧  
+* **complete**：同样代表动画结束，但是当前的帧停留在了动画过程中的最后一个帧  
+* **forward**：代表动画正在进行，而且是从starting到ending的中间某一个  
+* **reverse**：代表动画正在进行，但是是反方向运行  
+
+
+
+#### addListener  
+
+Animation中这个值的变化是指导UI动画效果实现的重点，但是当动画开始的时候，我们如何知道Animation的value发生了变化呢？答案就是调用addListener，传入一个无参数的普通Function，在这个Function中去任意的做事情，通常我们是在这个Function中调用setState方法来通知Widget重新绘制的  
+
+#### addStateListener  
+
+Animation也有自己的状态，状态是指动画是否开始、是否已经执行完毕等各种状态；其用法同addListener一样，通过设置这个监听器，我们可以实现在不同的状态下对动画进行一些改变，比如当动画执行完时让其再次执行，这就实现了一种循环动画的效果 
+
+### 2. AnimationController  
+
+上面说到Animation中保存的值，可以有很多类型：double、int、Color等，因此Animation有很多子类；而**AnimationController就是一个Animation<double>类型，其值的范围是0.0-1.0**，尽管如此，AnimationController的作用是**控制动画的持续时间、执行状态**，为了实现这些功能，AnimationController有很多方法：**forward()、stop()等** 。而如果AnimationController想要改变区间、不再是0.0-1.0的话，需要使用Tween来实现。  
+
+	AnimationController({
+	    double value,
+	    this.duration,
+	    this.debugLabel,
+	    this.lowerBound: 0.0,
+	    this.upperBound: 1.0,
+	    @required TickerProvider vsync,
+	  })  
+
+**duration就代表着动画的执行时间**，而AnimationController的value被定义为了double，这也就印证了上面；**lowerBound和upperBound分别代表了initial value和final value**
+
+### 3. Tween  
+
+**Tween为补间动画,即通过给定初始和末尾的状态，由系统自行计算从初始到末尾中间值的变化**，意思就是Tween通过插值的形式，来将动画的value弄为特定的对象的变化。其是**继承自Animatable<T>**,而**不是Animation<T>.**    
+
+	Tween _tween = new AlignmentTween(
+     begin: new Alignment(-1.0, 0.0),
+     end: new Alignment(1.0, 0.0),
+    );  
+    _animation = _tween.animate(_controller);
+	_controller.forward();
+
+上面就可以将Animation中value的变化映射为Alignment的变化。
+
+同样，Tween也有很多子类，ColorTween的begin和end必须是两个颜色，IntTween则要求是两个int等等。    
+
+但是我们之前说过，**指导UI构建动画效果的是Animation的value属性**，Tween是Animatable的子类，这该如何是好？Tween的**animate方法**，通过传入的**Animation<double>**参数，**返回一个Animation对象**，这样就可以通过这个返回的Animation对象的value属性来指导UI的动画效果的实现过程了。  
+
+### 4. Curve  
+
+**Animation的value的类型和区间都是可选的**，这里以IntTween举例，AnimationController规定了Animation的value在一个Duration时间内，完成从IntTween的begin到end的变化过程，但是又有一个变量空了出来，这个变化过程该如何进行？全程匀速？还是忽快忽慢？这就涉及到一个**映射的关系**了。  
+
+**Curve是Flutter中提供的一种非线性的曲线型映射关系**，Curves下有很多内置的曲线映射，我们也可以自己实现一个类继承Curve，**重写它的transform方法来定制自己的曲线**    
+
+在使用时我们通过**CurvedAnimation**来将一个Curve和Animation<double>绑定到一起，对没错，**CurvedAnimation的作用就是将一个AnimationController和一个Curve绑定到一起，返回的是一个Animation<double>**  
+
+#### Demo  
+
+	class MyApp extends StatefulWidget {
+
+	  @override
+	  State<StatefulWidget> createState() {
+	    // TODO: implement createState
+	    return _AnimationTestState();
+	  }
+	}
+	
+	class _AnimationTestState extends State<MyApp> with SingleTickerProviderStateMixin{
+	
+	  AnimationController controller;
+	  Animation<double>  animation;
+	  CurvedAnimation curve;
+	
+	  @override
+	  void initState() {
+	    // TODO: implement initState
+	    super.initState();
+	    controller = AnimationController(vsync: this, duration: Duration(seconds: 10));
+	    var tween = Tween(begin: 0.0, end: 10.0);
+	    curve = CurvedAnimation(parent: controller, curve: Curves.elasticIn);
+	    animation = tween.animate(curve);
+	    animation.addListener((){
+	      setState(() {
+	
+	      });
+	    });
+	    controller.forward();
+	  }
+	
+	  @override
+	  Widget build(BuildContext context) {
+	    return Center(
+	      child: Container(
+	        margin: EdgeInsets.all(20),
+	        child: Text("${animation.value}"),
+	      ),
+	    );
+	  }
+	}  
+
+以上代码就可以看到Text中的内容是：*区间为0.0-10.0的数，按照Curves.elasticIn的映射规则在10秒从0.0增加到10.0*  
+
+
+
+
+
+
+
+
+	
