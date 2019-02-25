@@ -1263,7 +1263,86 @@ Flutter中实现JSON有两种大的方面：
   
 并没有用到User中的toJson()方法  
 
-该中方法实现JSON最大的毛病就是需要手动维护，可能会出现bug  
+该中方法实现JSON最大的毛病就是需要手动维护，可能会出现bug    
+
+#### 含有嵌套形式的JSON解析  
+
+当JSON格式中含有嵌套形式的封装的时候，在fromJson中不能是简单的map[key]来进行赋值了，而应该调用其fromJson方法来进行初始化，而后赋值给外层的封装里的对象：  
+
+	{
+	  "shape_name":"rectangle",
+	  "property":{
+	    "width":5.0,
+	    "breadth":10.0
+	  }
+	}  
+
+像这种形式的封装的话(外层为Shape，内层为Property)，在Shape的fromJson方法中要这样初始化其property属性：  
+
+	Shape.fromJson(Map<String, dynamic> json) {
+		shape_name = json['shape_name'];
+		property = Property.fromJson(json['property']);
+	}
+
+#### 含有复杂list嵌套的形式  
+
+如果内部嵌套的类型位于一个数组中，也需要特别的处理：  
+
+	{
+	  "id":1,
+	  "name":"ProductName",
+	  "images":[
+	    {
+	      "id":11,
+	      "imageName":"xCh-rhy"
+	    },
+	    {
+	      "id":31,
+	      "imageName":"fjs-eun"
+	    }
+	  ]
+	}
+
+这里的话，由于map的images key对应的是一个**List<dynamic>**对象，直接赋值给外层的images属性的话，会报**List<image> is not a subtype of List<dynamic>**的错误，需要一个一个的添加进去：  
+
+	fromJson(...) {
+		...
+		var r = [];
+		for (var a in json['images']) {
+			var b = Image.fromJson(a);
+			r.add(b);
+		}
+		images = r;
+	}
+
+#### 只是一个list  
+
+	[
+	  {
+	    "albumId": 1,
+	    "id": 1,
+	    "title": "accusamus beatae ad facilis cum similique qui sunt",
+	    "url": "http://placehold.it/600/92c952",
+	    "thumbnailUrl": "http://placehold.it/150/92c952"
+	  },
+	  {
+	    "albumId": 1,
+	    "id": 2,
+	    "title": "reprehenderit est deserunt velit ipsam",
+	    "url": "http://placehold.it/600/771796",
+	    "thumbnailUrl": "http://placehold.it/150/771796"
+	  },
+	  {
+	    "albumId": 1,
+	    "id": 3,
+	    "title": "officia porro iure quia iusto qui ipsa ut modi",
+	    "url": "http://placehold.it/600/24f355",
+	    "thumbnailUrl": "http://placehold.it/150/24f355"
+	  }
+	]
+
+上面这种情况只有一个Lsit，所以我们在解析外层的时候，**其fromJson的参数变为了List<dynamic>而不再是Map<String, dynamic>**
+	
 
 ### 10.2 code generation  
 该方法相较于之前的优点是**自动生成**，该方法使用的是**json_serializable**包  
